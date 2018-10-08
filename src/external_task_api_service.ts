@@ -19,6 +19,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
   private readonly _externalTaskRepository: IExternalTaskRepository;
   private readonly _iamService: IIAMService;
 
+  private readonly _canReadExternalTasksClaim: string = 'can_read_external_tasks';
+
   constructor(eventAggregator: IEventAggregator, externalTaskRepository: IExternalTaskRepository, iamService: IIAMService) {
     this._eventAggregator = eventAggregator;
     this._externalTaskRepository = externalTaskRepository;
@@ -31,6 +33,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
                                          maxTasks: number,
                                          longPollingTimeout: number,
                                          lockDuration: number): Promise<Array<ExternalTask>> {
+
+    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
 
     const tasks: Array<ExternalTask> = await this._externalTaskRepository.fetchAvailableForProcessing(topicName, maxTasks);
 
@@ -46,6 +50,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
   public async extendLock(identity: IIdentity, workerId: string, externalTaskId: string, additionalDuration: number): Promise<void> {
 
+    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
@@ -56,6 +62,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
   }
 
   public async handleBpmnError(identity: IIdentity, workerId: string, externalTaskId: string, errorCode: string): Promise<void> {
+
+    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
 
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 
@@ -77,6 +85,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
                                   errorMessage: string,
                                   errorDetails: string): Promise<void> {
 
+    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
@@ -92,6 +102,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
   }
 
   public async finishExternalTask(identity: IIdentity, workerId: string, externalTaskId: string, payload: any): Promise<void> {
+
+    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
 
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 

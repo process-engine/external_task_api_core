@@ -2,16 +2,25 @@ import * as bluebird from 'bluebird';
 import * as moment from 'moment';
 
 import * as EssentialProjectErrors from '@essential-projects/errors_ts';
+import {IEventAggregator} from '@essential-projects/event_aggregator_contracts';
 import {IIAMService, IIdentity} from '@essential-projects/iam_contracts';
 
-import {ExternalTask, IExternalTaskApi, IExternalTaskRepository} from '@process-engine/external_task_api_contracts';
+import {
+  ExternalTask,
+  ExternalTaskErrorMessage,
+  ExternalTaskSuccessMessage,
+  IExternalTaskApi,
+  IExternalTaskRepository,
+} from '@process-engine/external_task_api_contracts';
 
 export class ExternalTaskApiService implements IExternalTaskApi {
 
+  private readonly _eventAggregator: IEventAggregator;
   private readonly _externalTaskRepository: IExternalTaskRepository;
   private readonly _iamService: IIAMService;
 
-  constructor(externalTaskRepository: IExternalTaskRepository, iamService: IIAMService) {
+  constructor(eventAggregator: IEventAggregator, externalTaskRepository: IExternalTaskRepository, iamService: IIAMService) {
+    this._eventAggregator = eventAggregator;
     this._externalTaskRepository = externalTaskRepository;
     this._iamService = iamService;
   }
@@ -55,7 +64,11 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     const error: EssentialProjectErrors.InternalServerError =
       new EssentialProjectErrors.InternalServerError(`ExternalTask failed due to BPMN error with code ${errorCode}`);
 
-    return this._externalTaskRepository.finishWithError(externalTaskId, error);
+    await this._externalTaskRepository.finishWithError(externalTaskId, error);
+
+    const errorNotificationPayload: ExternalTaskErrorMessage = new ExternalTaskErrorMessage(error);
+
+    this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
   public async handleServiceError(identity: IIdentity,
@@ -71,7 +84,11 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     const error: EssentialProjectErrors.InternalServerError = new EssentialProjectErrors.InternalServerError(errorMessage);
     error.additionalInformation = errorDetails;
 
-    return this._externalTaskRepository.finishWithError(externalTaskId, error);
+    await this._externalTaskRepository.finishWithError(externalTaskId, error);
+
+    const errorNotificationPayload: ExternalTaskErrorMessage = new ExternalTaskErrorMessage(error);
+
+    this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
   public async finishExternalTask(identity: IIdentity, workerId: string, externalTaskId: string, payload: any): Promise<void> {
@@ -80,7 +97,11 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
 
-    return this._externalTaskRepository.finishWithSuccess(externalTaskId, payload);
+    await this._externalTaskRepository.finishWithSuccess(externalTaskId, payload);
+
+    const successNotificationPayload: ExternalTaskSuccessMessage = new ExternalTaskSuccessMessage(payload);
+
+    this._publishExternalTaskFinishedMessage(externalTask, successNotificationPayload);
   }
 
   /**
@@ -131,7 +152,28 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     }
   }
 
+  /**
+   * Takes the given duration in ms and adds it to the current datetime.
+   * The result is returned as a date which can be used as a lockout date.
+   *
+   * @param   duration The duration in ms to use for the lockout date.
+   * @returns          The calculated lockout date.
+   */
   private _getLockExpirationDate(duration: number): Date {
     return moment().add(duration, 'milliseconds').toDate();
+  }
+
+  /**
+   * Publishes a message to the EventAggregator, which notifies about a finished
+   * ExternalTask.
+   *
+   * @param externalTask The ExternalTask for which to publish a notification.
+   * @param result       The result of the ExternalTask's execution.
+   */
+  private _publishExternalTaskFinishedMessage(externalTask: ExternalTask, result: any): void {
+
+    const externalTaskFinishedEventName: string = `/externaltask/flownodeinstance/${externalTask.flowNodeInstanceId}/finished`;
+
+    this._eventAggregator.publish(externalTaskFinishedEventName, result);
   }
 }

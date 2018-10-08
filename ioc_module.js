@@ -5,7 +5,7 @@ const ExternalTaskApiService = require('./dist/commonjs/index').ExternalTaskApiS
 function registerInContainer(container) {
 
   container.register('ExternalTaskApiService', ExternalTaskApiService)
-    .dependencies('ExternalTaskRepository', 'IamService')
+    .dependencies('EventAggregator', 'ExternalTaskRepository', 'IamService')
     .singleton();
 }
 

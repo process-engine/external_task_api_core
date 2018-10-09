@@ -20,7 +20,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
   private readonly _externalTaskRepository: IExternalTaskRepository;
   private readonly _iamService: IIAMService;
 
-  private readonly _canReadExternalTasksClaim: string = 'can_read_external_tasks';
+  private readonly _canAccessExternalTasksClaim: string = 'can_access_external_tasks';
 
   constructor(eventAggregator: IEventAggregator, externalTaskRepository: IExternalTaskRepository, iamService: IIAMService) {
     this._eventAggregator = eventAggregator;
@@ -35,7 +35,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
                                          longPollingTimeout: number,
                                          lockDuration: number): Promise<Array<ExternalTask>> {
 
-    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+    await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
     const tasks: Array<ExternalTask> = await this._externalTaskRepository.fetchAvailableForProcessing(topicName, maxTasks);
 
@@ -51,7 +51,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
   public async extendLock(identity: IIdentity, workerId: string, externalTaskId: string, additionalDuration: number): Promise<void> {
 
-    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+    await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 
@@ -64,7 +64,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
   public async handleBpmnError(identity: IIdentity, workerId: string, externalTaskId: string, errorCode: string): Promise<void> {
 
-    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+    await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 
@@ -86,7 +86,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
                                   errorMessage: string,
                                   errorDetails: string): Promise<void> {
 
-    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+    await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 
@@ -104,7 +104,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
   public async finishExternalTask(identity: IIdentity, workerId: string, externalTaskId: string, payload: any): Promise<void> {
 
-    await this._iamService.ensureHasClaim(identity, this._canReadExternalTasksClaim);
+    await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
     const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
 

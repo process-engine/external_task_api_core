@@ -8,6 +8,7 @@ import {IIAMService, IIdentity} from '@essential-projects/iam_contracts';
 import {
   ExternalTask,
   ExternalTaskErrorMessage,
+  ExternalTaskState,
   ExternalTaskSuccessMessage,
   IExternalTaskApi,
   IExternalTaskRepository,
@@ -150,7 +151,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
       throw new EssentialProjectErrors.NotFoundError(`External Task with ID '${externalTaskId}' not found.`);
     }
 
-    if (externalTask.isFinished) {
+    if (externalTask.state === ExternalTaskState.finished) {
       throw new EssentialProjectErrors.GoneError(`External Task with ID '${externalTaskId}' has been finished and is no longer accessible.`);
     }
 

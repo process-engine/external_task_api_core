@@ -8,6 +8,7 @@ import {IIAMService, IIdentity} from '@essential-projects/iam_contracts';
 import {
   ExternalTask,
   ExternalTaskErrorMessage,
+  ExternalTaskFromRepository,
   ExternalTaskState,
   ExternalTaskSuccessMessage,
   IExternalTaskApi,
@@ -28,21 +29,23 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._iamService = iamService;
   }
 
-  public async fetchAndLockExternalTasks(identity: IIdentity,
-                                         workerId: string,
-                                         topicName: string,
-                                         maxTasks: number,
-                                         longPollingTimeout: number,
-                                         lockDuration: number): Promise<Array<ExternalTask>> {
+  public async fetchAndLockExternalTasks<TPayloadType>(identity: IIdentity,
+                                                       workerId: string,
+                                                       topicName: string,
+                                                       maxTasks: number,
+                                                       longPollingTimeout: number,
+                                                       lockDuration: number,
+                                                      ): Promise<Array<ExternalTask<TPayloadType>>> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const tasks: Array<ExternalTask> = await this._externalTaskRepository.fetchAvailableForProcessing(topicName, maxTasks);
+    const tasks: Array<ExternalTaskFromRepository<TPayloadType>> =
+      await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
 
     const lockExpirationTime: Date = this._getLockExpirationDate(lockDuration);
 
-    const lockedTasks: Array<ExternalTask> =
-      await bluebird.map(tasks, async(externalTask: ExternalTask): Promise<ExternalTask> => {
+    const lockedTasks: Array<ExternalTask<TPayloadType>> =
+      await bluebird.map(tasks, async(externalTask: ExternalTask<TPayloadType>): Promise<ExternalTask<TPayloadType>> => {
         return this._lockExternalTask(externalTask, workerId, lockExpirationTime);
       });
 
@@ -53,7 +56,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
+    // Note: The type of the initial payload is irrelevant for lock extension.
+    const externalTask: ExternalTask<any> = await this._externalTaskRepository.getById<any>(externalTaskId);
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
 
@@ -66,7 +70,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
+    // Note: The type of the initial payload is irrelevant for finishing with an error.
+    const externalTask: ExternalTask<any> = await this._externalTaskRepository.getById<any>(externalTaskId);
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
 
@@ -88,7 +93,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
+    // Note: The type of the initial payload is irrelevant for finishing with an error.
+    const externalTask: ExternalTask<any> = await this._externalTaskRepository.getById<any>(externalTaskId);
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
 
@@ -102,15 +108,19 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async finishExternalTask(identity: IIdentity, workerId: string, externalTaskId: string, payload: any): Promise<void> {
+  public async finishExternalTask<TResultType>(identity: IIdentity,
+                                               workerId: string,
+                                               externalTaskId: string,
+                                               payload: TResultType): Promise<void> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const externalTask: ExternalTask = await this._externalTaskRepository.getById(externalTaskId);
+    // Note: The type of the initial payload is irrelevant for providing a final result.
+    const externalTask: ExternalTask<any> = await this._externalTaskRepository.getById<any>(externalTaskId);
 
     this._ensureExternalTaskCanBeAccessedByWorker(externalTask, externalTaskId, workerId);
 
-    await this._externalTaskRepository.finishWithSuccess(externalTaskId, payload);
+    await this._externalTaskRepository.finishWithSuccess<TResultType>(externalTaskId, payload);
 
     const successNotificationPayload: ExternalTaskSuccessMessage = new ExternalTaskSuccessMessage(payload);
 
@@ -127,7 +137,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
    * @param externalTaskId     The ID of the ExternalTask to lock.
    * @param lockExpirationTime The time at which to lock will be released.
    */
-  private async _lockExternalTask(externalTask: ExternalTask, workerId: string, lockExpirationTime: Date): Promise<ExternalTask> {
+  private async _lockExternalTask(externalTask: ExternalTask<any>, workerId: string, lockExpirationTime: Date): Promise<ExternalTask<any>> {
 
     await this._externalTaskRepository.lockForWorker(workerId, externalTask.id, lockExpirationTime);
 
@@ -145,7 +155,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
    * @param workerId       The ID of the worker attempting to manipulate the
    *                       ExternalTask.
    */
-  private _ensureExternalTaskCanBeAccessedByWorker(externalTask: ExternalTask, externalTaskId: string, workerId: string): void {
+  private _ensureExternalTaskCanBeAccessedByWorker(externalTask: ExternalTask<any>, externalTaskId: string, workerId: string): void {
 
     if (!externalTask) {
       throw new EssentialProjectErrors.NotFoundError(`External Task with ID '${externalTaskId}' not found.`);
@@ -183,7 +193,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
    * @param externalTask The ExternalTask for which to publish a notification.
    * @param result       The result of the ExternalTask's execution.
    */
-  private _publishExternalTaskFinishedMessage(externalTask: ExternalTask, result: any): void {
+  private _publishExternalTaskFinishedMessage(externalTask: ExternalTask<any>, result: any): void {
 
     const externalTaskFinishedEventName: string = `/externaltask/flownodeinstance/${externalTask.flowNodeInstanceId}/finished`;
 

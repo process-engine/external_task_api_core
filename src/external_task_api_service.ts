@@ -136,6 +136,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
    *                           ExternalTask.
    * @param externalTaskId     The ID of the ExternalTask to lock.
    * @param lockExpirationTime The time at which to lock will be released.
+   * @returns                  The clocked ExternalTask.
    */
   private async _lockExternalTask(externalTask: ExternalTask<any>, workerId: string, lockExpirationTime: Date): Promise<ExternalTask<any>> {
 
@@ -157,11 +158,13 @@ export class ExternalTaskApiService implements IExternalTaskApi {
    */
   private _ensureExternalTaskCanBeAccessedByWorker(externalTask: ExternalTask<any>, externalTaskId: string, workerId: string): void {
 
-    if (!externalTask) {
+    const externalTaskDoesNotExist: boolean = !externalTask;
+    if (externalTaskDoesNotExist) {
       throw new EssentialProjectErrors.NotFoundError(`External Task with ID '${externalTaskId}' not found.`);
     }
 
-    if (externalTask.state === ExternalTaskState.finished) {
+    const externalTaskIsAlreadyFinished: boolean = externalTask.state === ExternalTaskState.finished;
+    if (externalTaskIsAlreadyFinished) {
       throw new EssentialProjectErrors.GoneError(`External Task with ID '${externalTaskId}' has been finished and is no longer accessible.`);
     }
 
@@ -177,9 +180,9 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
   /**
    * Takes the given duration in ms and adds it to the current datetime.
-   * The result is returned as a date which can be used as a lockout date.
+   * The result is returned as a date which can be used as an unlock date.
    *
-   * @param   duration The duration in ms to use for the lockout date.
+   * @param   duration The duration in ms to use for the new unlock date.
    * @returns          The calculated lockout date.
    */
   private _getLockExpirationDate(duration: number): Date {

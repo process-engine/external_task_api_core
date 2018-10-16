@@ -28,7 +28,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._iamService = iamService;
   }
 
-  public async fetchAndLockExternalTasks<TPayloadType>(identity: IIdentity,
+  public async fetchAndLockExternalTasks<TPayloadType>(
+    identity: IIdentity,
     workerId: string,
     topicName: string,
     maxTasks: number,
@@ -84,7 +85,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async handleServiceError(identity: IIdentity,
+  public async handleServiceError(
+    identity: IIdentity,
     workerId: string,
     externalTaskId: string,
     errorMessage: string,
@@ -107,7 +109,8 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async finishExternalTask<TResultType>(identity: IIdentity,
+  public async finishExternalTask<TResultType>(
+    identity: IIdentity,
     workerId: string,
     externalTaskId: string,
     payload: TResultType): Promise<void> {

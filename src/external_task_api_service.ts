@@ -51,43 +51,6 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     return lockedTasks;
   }
 
-  private async _fetchOrWaitForExternalTasks<TPayloadType>(topicName: string, maxTasks: number, longPollingTimeout: number)
-    : Promise<Array<ExternalTask<TPayloadType>>> {
-
-    return new Promise<Array<ExternalTask<TPayloadType>>>(async (resolve): Promise<void> => {
-
-      const tasks: Array<ExternalTask<TPayloadType>> =
-        await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
-
-      if (tasks.length > 0) {
-        resolve(tasks);
-      }
-      let subscription: ISubscription;
-
-      const timeout = setTimeout(() => {
-        subscription.dispose();
-        resolve([]);
-      },
-        longPollingTimeout
-      );
-
-      const externalTaskCreatedEventName = `/externaltask/topic/${topicName}/created`;
-      subscription = this._eventAggregator.subscribeOnce(externalTaskCreatedEventName, async (): Promise<void> => {
-
-        clearTimeout(timeout);
-
-        const tasks: Array<ExternalTask<TPayloadType>> =
-          await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
-
-        if (tasks.length > 0) {
-          resolve(tasks);
-        } else {
-          resolve([]);
-        }
-      })
-    });
-  }
-
   public async extendLock(identity: IIdentity, workerId: string, externalTaskId: string, additionalDuration: number): Promise<void> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
@@ -163,6 +126,43 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     const successNotificationPayload: ExternalTaskSuccessMessage = new ExternalTaskSuccessMessage(payload);
 
     this._publishExternalTaskFinishedMessage(externalTask, successNotificationPayload);
+  }
+
+  private async _fetchOrWaitForExternalTasks<TPayloadType>(topicName: string, maxTasks: number, longPollingTimeout: number)
+    : Promise<Array<ExternalTask<TPayloadType>>> {
+
+    return new Promise<Array<ExternalTask<TPayloadType>>>(async (resolve): Promise<void> => {
+
+      const tasks: Array<ExternalTask<TPayloadType>> =
+        await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+
+      if (tasks.length > 0) {
+        resolve(tasks);
+      }
+      let subscription: ISubscription;
+
+      const timeout = setTimeout(() => {
+        subscription.dispose();
+        resolve([]);
+      },
+        longPollingTimeout
+      );
+
+      const externalTaskCreatedEventName = `/externaltask/topic/${topicName}/created`;
+      subscription = this._eventAggregator.subscribeOnce(externalTaskCreatedEventName, async (): Promise<void> => {
+
+        clearTimeout(timeout);
+
+        const tasks: Array<ExternalTask<TPayloadType>> =
+          await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+
+        if (tasks.length > 0) {
+          resolve(tasks);
+        } else {
+          resolve([]);
+        }
+      })
+    });
   }
 
   /**

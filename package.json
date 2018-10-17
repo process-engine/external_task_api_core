@@ -1,6 +1,6 @@
 {
   "name": "@process-engine/external_task_api_core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Contains the core implementation for the ExternalTask API.",
   "main": "dist/commonjs/index.js",
   "typings": "dist/index.d.ts",

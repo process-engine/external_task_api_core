@@ -8,7 +8,6 @@ import {IIAMService, IIdentity} from '@essential-projects/iam_contracts';
 import {
   ExternalTask,
   ExternalTaskErrorMessage,
-  ExternalTaskFromRepository,
   ExternalTaskState,
   ExternalTaskSuccessMessage,
   IExternalTaskApi,
@@ -29,23 +28,24 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._iamService = iamService;
   }
 
-  public async fetchAndLockExternalTasks<TPayloadType>(identity: IIdentity,
-                                                       workerId: string,
-                                                       topicName: string,
-                                                       maxTasks: number,
-                                                       longPollingTimeout: number,
-                                                       lockDuration: number,
-                                                      ): Promise<Array<ExternalTask<TPayloadType>>> {
+  public async fetchAndLockExternalTasks<TPayloadType>(
+    identity: IIdentity,
+    workerId: string,
+    topicName: string,
+    maxTasks: number,
+    longPollingTimeout: number,
+    lockDuration: number,
+  ): Promise<Array<ExternalTask<TPayloadType>>> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const tasks: Array<ExternalTaskFromRepository<TPayloadType>> =
+    const tasks: Array<ExternalTask<TPayloadType>> =
       await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
 
     const lockExpirationTime: Date = this._getLockExpirationDate(lockDuration);
 
     const lockedTasks: Array<ExternalTask<TPayloadType>> =
-      await bluebird.map(tasks, async(externalTask: ExternalTask<TPayloadType>): Promise<ExternalTask<TPayloadType>> => {
+      await bluebird.map(tasks, async (externalTask: ExternalTask<TPayloadType>): Promise<ExternalTask<TPayloadType>> => {
         return this._lockExternalTask(externalTask, workerId, lockExpirationTime);
       });
 
@@ -85,11 +85,12 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async handleServiceError(identity: IIdentity,
-                                  workerId: string,
-                                  externalTaskId: string,
-                                  errorMessage: string,
-                                  errorDetails: string): Promise<void> {
+  public async handleServiceError(
+    identity: IIdentity,
+    workerId: string,
+    externalTaskId: string,
+    errorMessage: string,
+    errorDetails: string): Promise<void> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
@@ -108,10 +109,11 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async finishExternalTask<TResultType>(identity: IIdentity,
-                                               workerId: string,
-                                               externalTaskId: string,
-                                               payload: TResultType): Promise<void> {
+  public async finishExternalTask<TResultType>(
+    identity: IIdentity,
+    workerId: string,
+    externalTaskId: string,
+    payload: TResultType): Promise<void> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 

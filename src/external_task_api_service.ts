@@ -142,6 +142,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
       if (taskAreNotEmpty) {
         resolve(tasks);
+
         return;
       }
 

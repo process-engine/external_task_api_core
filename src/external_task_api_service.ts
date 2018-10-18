@@ -2,7 +2,7 @@ import * as bluebird from 'bluebird';
 import * as moment from 'moment';
 
 import * as EssentialProjectErrors from '@essential-projects/errors_ts';
-import {IEventAggregator} from '@essential-projects/event_aggregator_contracts';
+import {IEventAggregator, ISubscription} from '@essential-projects/event_aggregator_contracts';
 import {IIAMService, IIdentity} from '@essential-projects/iam_contracts';
 
 import {
@@ -39,8 +39,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const tasks: Array<ExternalTask<TPayloadType>> =
-      await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+    const tasks: Array<ExternalTask<TPayloadType>> = await this._fetchOrWaitForExternalTasks<TPayloadType>(topicName, maxTasks, longPollingTimeout);
 
     const lockExpirationTime: Date = this._getLockExpirationDate(lockDuration);
 
@@ -127,6 +126,58 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     const successNotificationPayload: ExternalTaskSuccessMessage = new ExternalTaskSuccessMessage(payload);
 
     this._publishExternalTaskFinishedMessage(externalTask, successNotificationPayload);
+  }
+
+  private async _fetchOrWaitForExternalTasks<TPayloadType>(
+    topicName: string,
+    maxTasks: number,
+    longPollingTimeout: number): Promise<Array<ExternalTask<TPayloadType>>> {
+
+    return new Promise<Array<ExternalTask<TPayloadType>>>(async (resolve): Promise<void> => {
+
+      const tasks: Array<ExternalTask<TPayloadType>> =
+        await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+
+      const taskAreNotEmpty: boolean = tasks.length > 0;
+
+      if (taskAreNotEmpty) {
+        resolve(tasks);
+
+        return;
+      }
+
+      let subscription: ISubscription;
+
+      const timeout = setTimeout(() => {
+        const isSubscriptionSet: boolean = subscription !== undefined;
+
+        if (isSubscriptionSet) {
+          subscription.dispose();
+        }
+
+        resolve([]);
+      },
+        longPollingTimeout
+      );
+
+      const externalTaskCreatedEventName = `/externaltask/topic/${topicName}/created`;
+      subscription = this._eventAggregator.subscribeOnce(externalTaskCreatedEventName, async (): Promise<void> => {
+
+        clearTimeout(timeout);
+
+        const tasks: Array<ExternalTask<TPayloadType>> =
+          await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+
+        const tasksAreUndefined: boolean = tasks === undefined;
+
+        if (tasksAreUndefined) {
+          resolve([]);
+        } else {
+          resolve(tasks);
+        }
+
+      })
+    });
   }
 
   /**

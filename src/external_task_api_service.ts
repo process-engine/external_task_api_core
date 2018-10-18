@@ -173,6 +173,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
         } else {
           resolve([]);
         }
+
       })
     });
   }

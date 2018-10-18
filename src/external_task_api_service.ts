@@ -128,21 +128,31 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, successNotificationPayload);
   }
 
-  private async _fetchOrWaitForExternalTasks<TPayloadType>(topicName: string, maxTasks: number, longPollingTimeout: number)
-    : Promise<Array<ExternalTask<TPayloadType>>> {
+  private async _fetchOrWaitForExternalTasks<TPayloadType>(
+    topicName: string,
+    maxTasks: number,
+    longPollingTimeout: number): Promise<Array<ExternalTask<TPayloadType>>> {
 
     return new Promise<Array<ExternalTask<TPayloadType>>>(async (resolve): Promise<void> => {
 
       const tasks: Array<ExternalTask<TPayloadType>> =
         await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
 
-      if (tasks.length > 0) {
+      const taskAreNotEmpty: boolean = tasks.length > 0;
+
+      if (taskAreNotEmpty) {
         resolve(tasks);
       }
+
       let subscription: ISubscription;
 
       const timeout = setTimeout(() => {
-        subscription.dispose();
+        const isSubscriptionSet: boolean = subscription !== undefined;
+
+        if (isSubscriptionSet) {
+          subscription.dispose();
+        }
+
         resolve([]);
       },
         longPollingTimeout
@@ -156,7 +166,9 @@ export class ExternalTaskApiService implements IExternalTaskApi {
         const tasks: Array<ExternalTask<TPayloadType>> =
           await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
 
-        if (tasks.length > 0) {
+        const taskAreNotEmpty: boolean = tasks.length > 0;
+
+        if (taskAreNotEmpty) {
           resolve(tasks);
         } else {
           resolve([]);

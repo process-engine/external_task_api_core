@@ -28,23 +28,22 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._iamService = iamService;
   }
 
-  public async fetchAndLockExternalTasks<TPayloadType>(
-    identity: IIdentity,
-    workerId: string,
-    topicName: string,
-    maxTasks: number,
-    longPollingTimeout: number,
-    lockDuration: number,
-  ): Promise<Array<ExternalTask<TPayloadType>>> {
+  public async fetchAndLockExternalTasks<TPayload>(identity: IIdentity,
+                                                   workerId: string,
+                                                   topicName: string,
+                                                   maxTasks: number,
+                                                   longPollingTimeout: number,
+                                                   lockDuration: number,
+                                                  ): Promise<Array<ExternalTask<TPayload>>> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
-    const tasks: Array<ExternalTask<TPayloadType>> = await this._fetchOrWaitForExternalTasks<TPayloadType>(topicName, maxTasks, longPollingTimeout);
+    const tasks: Array<ExternalTask<TPayload>> = await this._fetchOrWaitForExternalTasks<TPayload>(topicName, maxTasks, longPollingTimeout);
 
     const lockExpirationTime: Date = this._getLockExpirationDate(lockDuration);
 
-    const lockedTasks: Array<ExternalTask<TPayloadType>> =
-      await bluebird.map(tasks, async (externalTask: ExternalTask<TPayloadType>): Promise<ExternalTask<TPayloadType>> => {
+    const lockedTasks: Array<ExternalTask<TPayload>> =
+      await bluebird.map(tasks, async(externalTask: ExternalTask<TPayload>): Promise<ExternalTask<TPayload>> => {
         return this._lockExternalTask(externalTask, workerId, lockExpirationTime);
       });
 
@@ -84,12 +83,12 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async handleServiceError(
-    identity: IIdentity,
-    workerId: string,
-    externalTaskId: string,
-    errorMessage: string,
-    errorDetails: string): Promise<void> {
+  public async handleServiceError(identity: IIdentity,
+                                  workerId: string,
+                                  externalTaskId: string,
+                                  errorMessage: string,
+                                  errorDetails: string,
+                                 ): Promise<void> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
@@ -108,11 +107,11 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, errorNotificationPayload);
   }
 
-  public async finishExternalTask<TResultType>(
-    identity: IIdentity,
-    workerId: string,
-    externalTaskId: string,
-    payload: TResultType): Promise<void> {
+  public async finishExternalTask<TResultType>(identity: IIdentity,
+                                               workerId: string,
+                                               externalTaskId: string,
+                                               payload: TResultType,
+                                              ): Promise<void> {
 
     await this._iamService.ensureHasClaim(identity, this._canAccessExternalTasksClaim);
 
@@ -128,15 +127,15 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     this._publishExternalTaskFinishedMessage(externalTask, successNotificationPayload);
   }
 
-  private async _fetchOrWaitForExternalTasks<TPayloadType>(
-    topicName: string,
-    maxTasks: number,
-    longPollingTimeout: number): Promise<Array<ExternalTask<TPayloadType>>> {
+  private async _fetchOrWaitForExternalTasks<TPayload>(topicName: string,
+                                                       maxTasks: number,
+                                                       longPollingTimeout: number,
+                                                      ): Promise<Array<ExternalTask<TPayload>>> {
 
-    return new Promise<Array<ExternalTask<TPayloadType>>>(async (resolve): Promise<void> => {
+    return new Promise<Array<ExternalTask<TPayload>>>(async(resolve: Function): Promise<void> => {
 
-      const tasks: Array<ExternalTask<TPayloadType>> =
-        await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+      const tasks: Array<ExternalTask<TPayload>> =
+        await this._externalTaskRepository.fetchAvailableForProcessing<TPayload>(topicName, maxTasks);
 
       const taskAreNotEmpty: boolean = tasks.length > 0;
 
@@ -148,35 +147,26 @@ export class ExternalTaskApiService implements IExternalTaskApi {
 
       let subscription: ISubscription;
 
-      const timeout = setTimeout(() => {
+      const timeout: NodeJS.Timeout = setTimeout(() => {
         const isSubscriptionSet: boolean = subscription !== undefined;
 
         if (isSubscriptionSet) {
           subscription.dispose();
         }
 
-        resolve([]);
-      },
-        longPollingTimeout
-      );
+        return resolve([]);
+      }, longPollingTimeout);
 
-      const externalTaskCreatedEventName = `/externaltask/topic/${topicName}/created`;
-      subscription = this._eventAggregator.subscribeOnce(externalTaskCreatedEventName, async (): Promise<void> => {
+      const externalTaskCreatedEventName: string = `/externaltask/topic/${topicName}/created`;
+      subscription = this._eventAggregator.subscribeOnce(externalTaskCreatedEventName, async(): Promise<void> => {
 
         clearTimeout(timeout);
 
-        const tasks: Array<ExternalTask<TPayloadType>> =
-          await this._externalTaskRepository.fetchAvailableForProcessing<TPayloadType>(topicName, maxTasks);
+        const availableTasks: Array<ExternalTask<TPayload>> =
+          await this._externalTaskRepository.fetchAvailableForProcessing<TPayload>(topicName, maxTasks);
 
-        const tasksAreUndefined: boolean = tasks === undefined;
-
-        if (tasksAreUndefined) {
-          resolve([]);
-        } else {
-          resolve(tasks);
-        }
-
-      })
+        resolve(availableTasks);
+      });
     });
   }
 

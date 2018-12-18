@@ -1,8 +1,7 @@
-import * as bluebird from 'bluebird';
 import * as moment from 'moment';
 
 import * as EssentialProjectErrors from '@essential-projects/errors_ts';
-import {IEventAggregator, ISubscription} from '@essential-projects/event_aggregator_contracts';
+import {IEventAggregator, Subscription} from '@essential-projects/event_aggregator_contracts';
 import {IIAMService, IIdentity} from '@essential-projects/iam_contracts';
 
 import {
@@ -43,7 +42,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
     const lockExpirationTime: Date = this._getLockExpirationDate(lockDuration);
 
     const lockedTasks: Array<ExternalTask<TPayload>> =
-      await bluebird.map(tasks, async(externalTask: ExternalTask<TPayload>): Promise<ExternalTask<TPayload>> => {
+      await Promise.map(tasks, async(externalTask: ExternalTask<TPayload>): Promise<ExternalTask<TPayload>> => {
         return this._lockExternalTask(externalTask, workerId, lockExpirationTime);
       });
 
@@ -140,19 +139,13 @@ export class ExternalTaskApiService implements IExternalTaskApi {
       const taskAreNotEmpty: boolean = tasks.length > 0;
 
       if (taskAreNotEmpty) {
-        resolve(tasks);
-
-        return;
+        return resolve(tasks);
       }
 
-      let subscription: ISubscription;
+      let subscription: Subscription;
 
       const timeout: NodeJS.Timeout = setTimeout(() => {
-        const isSubscriptionSet: boolean = subscription !== undefined;
-
-        if (isSubscriptionSet) {
-          subscription.dispose();
-        }
+        this._eventAggregator.unsubscribe(subscription);
 
         return resolve([]);
       }, longPollingTimeout);
@@ -165,7 +158,7 @@ export class ExternalTaskApiService implements IExternalTaskApi {
         const availableTasks: Array<ExternalTask<TPayload>> =
           await this._externalTaskRepository.fetchAvailableForProcessing<TPayload>(topicName, maxTasks);
 
-        resolve(availableTasks);
+        return resolve(availableTasks);
       });
     });
   }

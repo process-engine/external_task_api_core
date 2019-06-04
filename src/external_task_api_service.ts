@@ -1,4 +1,5 @@
 /* eslint-disable no-param-reassign */
+import {Logger} from 'loggerhythm';
 import * as moment from 'moment';
 
 import * as EssentialProjectErrors from '@essential-projects/errors_ts';
@@ -13,6 +14,8 @@ import {
   IExternalTaskApi,
   IExternalTaskRepository,
 } from '@process-engine/external_task_api_contracts';
+
+const logger = new Logger('processengine:external_task_api:service');
 
 export class ExternalTaskApiService implements IExternalTaskApi {
 
@@ -47,7 +50,10 @@ export class ExternalTaskApiService implements IExternalTaskApi {
       return this.lockExternalTask(externalTask, workerId, lockExpirationTime);
     });
 
-    return lockedTasks;
+    // An "undefined" entry matches a task that could not be locked for the worker.
+    const availableTasks = lockedTasks.filter((task): boolean => task !== undefined);
+
+    return availableTasks;
   }
 
   public async extendLock(identity: IIdentity, workerId: string, externalTaskId: string, additionalDuration: number): Promise<void> {
@@ -176,12 +182,20 @@ export class ExternalTaskApiService implements IExternalTaskApi {
    */
   private async lockExternalTask(externalTask: ExternalTask<any>, workerId: string, lockExpirationTime: Date): Promise<ExternalTask<any>> {
 
-    await this.externalTaskRepository.lockForWorker(workerId, externalTask.id, lockExpirationTime);
+    try {
+      await this.externalTaskRepository.lockForWorker(workerId, externalTask.id, lockExpirationTime);
 
-    externalTask.workerId = workerId;
-    externalTask.lockExpirationTime = lockExpirationTime;
+      externalTask.workerId = workerId;
+      externalTask.lockExpirationTime = lockExpirationTime;
 
-    return externalTask;
+      return externalTask;
+    } catch (error) {
+      // eslint-disable-next-line max-len
+      logger.warn(`Failed to lock ExternalTask ${externalTask.id} for worker ${workerId}. This can happen, if the task was already locked by a different worker.`);
+      logger.warn('Error: ', error.message);
+
+      return undefined;
+    }
   }
 
   /**
